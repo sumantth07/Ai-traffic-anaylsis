@@ -869,6 +869,123 @@ class TrafficAnalyzer:
         logger.info(f"✓ Frame data saved to {self.output_json_path}")
 
         return True
+    
+    def _continue_processing_with_frame(self, progress_callback: Optional[Callable[[float, int, int, np.ndarray], None]] = None) -> bool:
+        """
+        Tiếp tục xử lý video với callback trả về frame để hiển thị real-time
+        
+        Args:
+            progress_callback: Callback nhận (progress_fraction, frame_idx, total_frames, result_frame_rgb)
+        
+        Returns:
+            bool: True nếu thành công
+        """
+        if self.cap is None or self.out is None:
+            logger.error("❌ Video not loaded. Call load_video() first")
+            return False
+        
+        if self.counting_line_y is None:
+            self.set_counting_line()
+        
+        # Nếu chưa calibrate, dùng giá trị mặc định
+        if self.pixels_per_meter == 1.0:
+            logger.warning("⚠ Calibration not set, using default value (1.0 pixels/meter)")
+            self.set_calibration(reference_object_pixels=150, reference_object_meters=4.5)
+        
+        # DEBUG: In thông tin video input
+        logger.info("🎬 Processing video...")
+        logger.info(f"📊 INPUT VIDEO INFO:")
+        logger.info(f"  - FPS: {self.fps}")
+        logger.info(f"  - Total frames: {self.total_frames}")
+        logger.info(f"  - Resolution: {self.frame_width}x{self.frame_height}")
+        logger.info(f"  - Duration: {self.total_frames / self.fps:.2f} seconds")
+        
+        frame_id = 0
+        frames_written = 0
+        
+        try:
+            while True:
+                ret, frame = self.cap.read()
+                if not ret:
+                    break
+                
+                # Kiểm tra kích thước frame
+                if frame.shape[1] != self.frame_width or frame.shape[0] != self.frame_height:
+                    frame = cv2.resize(frame, (self.frame_width, self.frame_height))
+                
+                # Detect vehicles
+                detections = self.detect_vehicles(frame)
+                
+                # Match và update tracks
+                matched, unmatched_dets = self.match_detections_to_tracks(detections)
+                self.update_tracks(matched, unmatched_dets, detections, frame_id)
+                
+                # Check line crossing
+                crossed = self.detect_line_crossing()
+                self.vehicle_count += len(crossed)
+                
+                # Draw results
+                result_frame = self.draw_results(frame, frame_id)
+                
+                # Kiểm tra kích thước result_frame trước khi ghi
+                if result_frame.shape[1] != self.frame_width or result_frame.shape[0] != self.frame_height:
+                    result_frame = cv2.resize(result_frame, (self.frame_width, self.frame_height))
+                
+                # Write to output video
+                self.out.write(result_frame)
+                frames_written += 1
+                
+                # Progress với frame
+                if progress_callback:
+                    try:
+                        frac = min(max((frame_id + 1) / max(1, self.total_frames), 0.0), 1.0)
+                        # Chuyển BGR sang RGB cho Streamlit
+                        result_frame_rgb = cv2.cvtColor(result_frame, cv2.COLOR_BGR2RGB)
+                        progress_callback(frac, frame_id + 1, self.total_frames, result_frame_rgb)
+                    except Exception:
+                        pass
+                elif frame_id % 30 == 0:
+                    progress = (frame_id / self.total_frames) * 100
+                    logger.info(f"Progress: {progress:.1f}% (Frame {frame_id}/{self.total_frames})")
+                
+                frame_id += 1
+            
+            # DEBUG: In thông tin output
+            logger.info("✓ Video processing completed")
+            logger.info(f"📊 OUTPUT VIDEO INFO:")
+            logger.info(f"  - Frames read: {frame_id}")
+            logger.info(f"  - Frames written: {frames_written}")
+            logger.info(f"  - Expected duration: {frames_written / self.fps:.2f} seconds")
+            
+            if frames_written != frame_id:
+                logger.warning(f"⚠ Frame count mismatch! Read: {frame_id}, Written: {frames_written}")
+            
+            if progress_callback:
+                try:
+                    progress_callback(1.0, self.total_frames, self.total_frames, None)
+                except Exception:
+                    pass
+            
+        except Exception as e:
+            logger.error(f"❌ Error during processing: {e}")
+            return False
+        
+        finally:
+            self.cap.release()
+            self.out.release()
+            cv2.destroyAllWindows()
+        
+        # Save statistics
+        self.save_statistics()
+        self.save_frame_data()
+        self.print_summary()
+        self._reencode_h264()
+
+        logger.info(f"✓ Output video saved to {self.output_video_path}")
+        logger.info(f"✓ Statistics saved to {self.output_csv_path}")
+        logger.info(f"✓ Frame data saved to {self.output_json_path}")
+
+        return True
 
     def save_statistics(self):
         """Lưu thống kê ra CSV"""

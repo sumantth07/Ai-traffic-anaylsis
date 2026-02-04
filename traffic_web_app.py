@@ -43,6 +43,7 @@ class AppState:
         self.processing_progress: float = 0.0  # 0.0 to 1.0
         self.current_frame_display: int = 0
         self.total_frames_expected: int = 0
+        self.current_frame: np.ndarray | None = None  # Frame hiện tại để hiển thị
 
     def log(self, msg: str):
         self.log_lines.append(msg)
@@ -130,6 +131,11 @@ with col_video:
     video_placeholder = st.empty()
     progress_placeholder = st.empty()
     frame_info_placeholder = st.empty()
+    
+    # Hiển thị video real-time khi đang xử lý
+    if app.is_running and app.current_frame is not None:
+        video_placeholder.image(app.current_frame, channels="RGB", caption="Đang xử lý...", use_container_width=True)
+        frame_info_placeholder.text(f"Frame: {app.current_frame_display}/{app.total_frames_expected}")
 
     # Logs
     st.markdown("### Lịch Sử Phiên")
@@ -380,11 +386,15 @@ def run_analysis_thread(video_path: str):
         app.log("⏳ Đang xử lý video...")
         app.processing_progress = 0.0
 
-        def on_progress(frac: float, frame_idx: int, total_frames: int):
+        def on_progress(frac: float, frame_idx: int, total_frames: int, frame_rgb: np.ndarray = None):
             # Update progress fraction 0.0-1.0
             app.processing_progress = frac
+            app.current_frame_display = frame_idx
+            # Lưu frame hiện tại để hiển thị (mỗi 5 frames để giảm tải)
+            if frame_rgb is not None and frame_idx % 5 == 0:
+                app.current_frame = frame_rgb
 
-        ok = analyzer._continue_processing(progress_callback=on_progress)
+        ok = analyzer._continue_processing_with_frame(progress_callback=on_progress)
         
         if ok:
             app.log("✅ Xử lý hoàn tất! Đang chuẩn bị kết quả...")
