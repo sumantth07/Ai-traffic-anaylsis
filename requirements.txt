@@ -1,0 +1,14 @@
+# Core dependencies - Compatible with Python 3.9-3.13
+opencv-python>=4.8.0
+numpy>=1.26.0
+ultralytics>=8.0.0
+Pillow>=10.0.0
+matplotlib>=3.8.0
+pyyaml>=6.0
+tqdm>=4.66.0
+pandas>=2.0.0
+streamlit>=1.31.0
+
+# Optional: PyTorch (only if you need GPU acceleration)
+# torch>=2.0.0
+# torchvision>=0.15.0

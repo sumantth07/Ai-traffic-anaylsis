@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# Video files
+*.mp4
+*.avi
+*.mov
+*.mkv
+output_video/
+temp_uploaded_video.mp4
+uploaded_video.mp4
+
+# Output files
+traffic_statistics.csv
+traffic_statistics_frames.json
+
+# YOLO models (large files)
+*.pt
+!yolov8n.pt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Screenshots
+*.png
+*.jpg
+*.jpeg
+
+# Logs
+*.log
+
+# Temporary files
+temp_*
+test_*
