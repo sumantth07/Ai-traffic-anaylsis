@@ -10,6 +10,7 @@ import os
 import time
 import threading
 import cv2
+import numpy as np
 import pandas as pd
 from typing import Dict, Any
 from collections import defaultdict
@@ -164,8 +165,20 @@ with col_stats:
     breakdown = app.last_summary.get("breakdown", {})
     
     if breakdown:
+        # Hiển thị dưới dạng bảng
+        breakdown_data = []
         for class_name, count in sorted(breakdown.items(), key=lambda x: x[1], reverse=True):
-            st.write(f"• {class_name.upper()}: **{count}**")
+            breakdown_data.append({
+                "Loại Xe": class_name.upper(),
+                "Số Lượng": count,
+                "Tỷ Lệ": f"{(count/total_vehicles*100):.1f}%" if total_vehicles > 0 else "0%"
+            })
+        if breakdown_data:
+            st.dataframe(
+                pd.DataFrame(breakdown_data),
+                use_container_width=True,
+                hide_index=True
+            )
     else:
         st.write("_(chưa có dữ liệu)_")
 
@@ -173,16 +186,95 @@ with col_stats:
     st.markdown("### Top Tốc Độ")
     recent = app.last_summary.get("recent", [])
     if recent:
-        for i, item in enumerate(recent[-5:], 1):
-            st.write(f"{i}. ID:{item['id']} {item['class']} - {item['speed']:.1f} km/h")
+        # Hiển thị dưới dạng bảng
+        top_speed_data = []
+        for i, item in enumerate(recent[:5], 1):
+            top_speed_data.append({
+                "#": i,
+                "ID": item['id'],
+                "Loại": item['class'].upper(),
+                "Tốc Độ (km/h)": f"{item['speed']:.1f}"
+            })
+        if top_speed_data:
+            st.dataframe(
+                pd.DataFrame(top_speed_data),
+                use_container_width=True,
+                hide_index=True
+            )
     else:
         st.write("_(chưa có dữ liệu)_")
+
+
+# ---------------------- BẢNG TỔNG HỢP KẾT QUẢ CHÍNH ----------------------
+if app.last_summary.get("total_vehicles", 0) > 0:
+    st.markdown("---")
+    st.markdown("## 📊 BẢNG TỔNG HỢP KẾT QUẢ NHẬN DIỆN")
+    
+    total_vehicles = app.last_summary.get("total_vehicles", 0)
+    vehicles_passed = app.last_summary.get("vehicle_count", 0)
+    avg_speed = app.last_summary.get("avg_speed", 0.0)
+    max_speed = app.last_summary.get("max_speed", 0.0)
+    breakdown = app.last_summary.get("breakdown", {})
+    
+    # Bảng 1: Tổng quan hệ thống
+    st.markdown("### 📈 1. TỔNG QUAN HỆ THỐNG")
+    overview_data = [
+        {"Chỉ Số": "🚗 Tổng số xe nhận diện được", "Giá Trị": total_vehicles, "Đơn Vị": "xe"},
+        {"Chỉ Số": "✅ Số xe đã qua vạch đếm", "Giá Trị": vehicles_passed, "Đơn Vị": "xe"},
+        {"Chỉ Số": "📊 Tốc độ trung bình", "Giá Trị": f"{avg_speed:.2f}", "Đơn Vị": "km/h"},
+        {"Chỉ Số": "⚡ Tốc độ cao nhất", "Giá Trị": f"{max_speed:.2f}", "Đơn Vị": "km/h"},
+    ]
+    st.dataframe(
+        pd.DataFrame(overview_data),
+        use_container_width=True,
+        hide_index=True
+    )
+    
+    # Bảng 2: Phân loại xe theo loại
+    st.markdown("### 🚙 2. PHÂN LOẠI PHƯƠNG TIỆN")
+    if breakdown:
+        breakdown_table = []
+        for class_name, count in sorted(breakdown.items(), key=lambda x: x[1], reverse=True):
+            pct = (count / total_vehicles * 100) if total_vehicles > 0 else 0
+            breakdown_table.append({
+                "STT": len(breakdown_table) + 1,
+                "Loại Phương Tiện": class_name.upper(),
+                "Số Lượng": count,
+                "Tỷ Lệ (%)": f"{pct:.1f}%",
+                "Biểu Đồ": "█" * int(pct / 2)  # Simple bar chart
+            })
+        st.dataframe(
+            pd.DataFrame(breakdown_table),
+            use_container_width=True,
+            hide_index=True
+        )
+    
+    # Bảng 3: Thống kê tốc độ theo loại xe
+    st.markdown("### ⚡ 3. THỐNG KÊ TỐC ĐỘ THEO LOẠI XE")
+    summary_by_type = app.last_summary.get("summary_by_type", {})
+    if summary_by_type:
+        speed_stats_table = []
+        for class_name, stats in sorted(summary_by_type.items(), key=lambda x: x[1]['count'], reverse=True):
+            speed_stats_table.append({
+                "STT": len(speed_stats_table) + 1,
+                "Loại Xe": class_name.upper(),
+                "Số Lượng": stats['count'],
+                "Tốc Độ TB (km/h)": f"{stats['avg_speed']:.2f}",
+                "Tốc Độ Max (km/h)": f"{stats['max_speed']:.2f}",
+                "Đánh Giá": "🟢 Bình thường" if stats['avg_speed'] < 50 else "🟡 Hơi nhanh" if stats['avg_speed'] < 70 else "🔴 Quá nhanh"
+            })
+        st.dataframe(
+            pd.DataFrame(speed_stats_table),
+            use_container_width=True,
+            hide_index=True
+        )
 
 
 # ---------------------- DETAILED RESULTS TABLE ----------------------
 if app.last_summary.get("detailed_stats"):
     st.markdown("---")
-    st.markdown("### Bảng Thống Kê Chi Tiết")
+    st.markdown("### 📋 4. BẢNG CHI TIẾT TỪNG PHƯƠNG TIỆN")
+    st.caption("Danh sách đầy đủ tất cả phương tiện được nhận diện")
     
     detailed_stats = app.last_summary.get("detailed_stats", [])
     if detailed_stats:
@@ -203,29 +295,62 @@ if app.last_summary.get("detailed_stats"):
             df['max_speed'] = df['max_speed'].astype(float)
             df = df.sort_values('avg_speed', ascending=False)
         
-        # Display as table
+        # Thêm cột STT và phân loại tốc độ
+        df.insert(0, 'STT', range(1, len(df) + 1))
+        
+        # Thêm cột đánh giá tốc độ
+        def evaluate_speed(speed):
+            if speed < 40:
+                return "🟢 Chậm"
+            elif speed < 60:
+                return "🟡 Trung bình"
+            elif speed < 80:
+                return "🟠 Nhanh"
+            else:
+                return "🔴 Rất nhanh"
+        
+        df['Đánh Giá'] = df['avg_speed'].apply(evaluate_speed)
+        
+        # Display as table with improved columns
+        display_cols_improved = {
+            'STT': 'STT',
+            'vehicle_id': 'ID Xe',
+            'class_name': 'Loại Xe',
+            'avg_speed': 'Tốc Độ TB (km/h)',
+            'max_speed': 'Tốc Độ Max (km/h)',
+            'num_frames': 'Số Frame',
+            'Đánh Giá': 'Đánh Giá'
+        }
+        
         st.dataframe(
-            df[list(display_cols.keys())].rename(columns=display_cols),
+            df[list(display_cols_improved.keys())].rename(columns=display_cols_improved),
             use_container_width=True,
             hide_index=True
         )
-    
-    # Summary by vehicle type
-    st.markdown("### Thống Kê Theo Loại Xe")
-    summary_by_type = app.last_summary.get("summary_by_type", {})
-    
-    if summary_by_type:
-        type_data = []
-        for class_name, stats in sorted(summary_by_type.items()):
-            type_data.append({
-                'Loại Xe': class_name.upper(),
-                'Số Lượng': stats['count'],
-                'Tốc Độ TB (km/h)': f"{stats['avg_speed']:.2f}",
-                'Tốc Độ Max (km/h)': f"{stats['max_speed']:.2f}"
+        
+        # Thống kê nhanh về phân bố tốc độ
+        st.markdown("#### 📊 Phân Bố Tốc Độ")
+        speed_distribution = {
+            "🟢 Chậm (< 40 km/h)": len(df[df['avg_speed'] < 40]),
+            "🟡 Trung bình (40-60 km/h)": len(df[(df['avg_speed'] >= 40) & (df['avg_speed'] < 60)]),
+            "🟠 Nhanh (60-80 km/h)": len(df[(df['avg_speed'] >= 60) & (df['avg_speed'] < 80)]),
+            "🔴 Rất nhanh (≥ 80 km/h)": len(df[df['avg_speed'] >= 80])
+        }
+        
+        dist_data = []
+        for category, count in speed_distribution.items():
+            pct = (count / len(df) * 100) if len(df) > 0 else 0
+            dist_data.append({
+                "Phân Loại": category,
+                "Số Lượng": count,
+                "Tỷ Lệ": f"{pct:.1f}%"
             })
         
-        df_summary = pd.DataFrame(type_data)
-        st.dataframe(df_summary, use_container_width=True, hide_index=True)
+        st.dataframe(
+            pd.DataFrame(dist_data),
+            use_container_width=True,
+            hide_index=True
+        )
 
 
 # ======================== SUMMARY RESULTS SECTION ========================
